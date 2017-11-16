@@ -1,6 +1,4 @@
-# Under Development. Please do not use.
-# RSSI Based Chrono for Taranis
-currently developed for OpenTX 2.2
+# RSSI Based Chrono for Taranis Telemetry Screen.
+# Version 1
 
-This script is for Telemetry screen.
-It uses RSSI, VFAS, THR, ELE, RUD, and Local Switch.
+Currently developed for OpenTX 2.2
