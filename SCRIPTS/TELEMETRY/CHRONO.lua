@@ -1,7 +1,7 @@
 -- common stuff
 local _countDownIndicatorIndex = 4
 local _lastLapSwitchValue = 0;
-local _lastTick = 0;
+local _lastTick = getTime();
 local _bestLap = 123456;
 local _lastCount = 0; -- used in count down
 
@@ -35,6 +35,15 @@ local _throttle_trigger = -80 -- The throttle should be at %20 before the lap ti
 local _rssi_min_trigger = 80 -- the minimum rssi to trigger a new lap 80default
 local _rssi_callout = false
 local _vfas_callout = false
+local _ls_names = {'ls1','ls2','ls3','ls4','ls5','ls6','ls7','ls8','ls9','ls10',}
+local _ls_index = 1 -- check _lapSwitch
+
+-- config helpers
+local CONFIG_LAPS = 0;
+local CONFIG_CUSTOM_SWITCH = 1;
+local CONFIG_MIN_RSSI = 2;
+local CONFIG_CURRENT = 0; -- default CONFIG_LAPS
+local _incre = 0;
 
 -- data sources
 local DS_THR = 'thr';
@@ -103,6 +112,10 @@ function SecondsToMSMs(seconds)
 	end
 end
 
+function iif(cond, T, F)
+    if cond then return T else return F end
+end
+
 local function DRAW_SPLASH_PAGE(keyEvent)
 	lcd.clear();
 	
@@ -116,18 +129,62 @@ local function DRAW_CONFIG_PAGE(keyEvent)
 	rssi = getValue(DS_RSSI);
 	lcd.drawText(169,0,'RSSI: '..rssi..'');
 	
-	lcd.drawText(2,9,'Number of laps: ');
-	lcd.drawText(lcd.getLastPos()+2,9,_lapCount);
+	ele = 0;
+	if(math.floor(getTime() - _lastTick) / 100 > 1) then
+		ele = getValue('ele');	
+		_lastTick = getTime();		
+	end
 	
-	lcd.drawText(2,9*2,'Custom switch in LS: ');
-	lcd.drawText(lcd.getLastPos()+2,9*2,_lapSwitch);
+	if(ele < -980) then
+		_incre = -1;
+	elseif (ele > 980) then
+		_incre = 1;
+	elseif ((ele > -980 and ele < 0) or (ele < 980 and ele > 0)) then
+		_incre = 0;
+	else
+		_incre = 0;
+	end
 	
-	lcd.drawText(2,9*3,'Minimum RSSI: ');
-	--lcd.drawText(lcd.getLastPos()+2,9*3,_rssi_min_trigger);
-	lcd.drawText(lcd.getLastPos()+2,9*3,getValue('ele'));
+	if(CONFIG_CURRENT == CONFIG_LAPS) then
+		_lapCount = _lapCount + _incre;
+		if(_lapCount < 1) then _lapCount = 1 end
+	elseif (CONFIG_CURRENT == CONFIG_CUSTOM_SWITCH) then
+		_ls_index = _ls_index + _incre;
+		if(_ls_index < 1) then _ls_index = 1 end
+		if(_ls_index > 10) then _ls_index = 10 end
+		_lapSwitch = _ls_names[_ls_index];
+	elseif (CONFIG_CURRENT == CONFIG_MIN_RSSI) then
+		_rssi_min_trigger = _rssi_min_trigger + _incre;
+		if(_rssi_min_trigger < 10) then _rssi_min_trigger = 10 end
+	end
+	
+	lcd.drawText(2,9,'MAKE SURE YOUR KWAD IS DIARMED!');
+	lcd.drawText(2,9*2,'Pitch up or down to adjust the values.');
+	
+	lcd.drawText(2,9*3,'Number of laps: ');
+	lcd.drawText(lcd.getLastPos()+2,9*3,_lapCount,
+		iif(CONFIG_CURRENT == CONFIG_LAPS,INVERS+BLINK,0)
+	);
+	
+	lcd.drawText(2,9*4,'Custom switch in LS: ');
+	lcd.drawText(lcd.getLastPos()+2,9*4,_lapSwitch,
+		iif(CONFIG_CURRENT == CONFIG_CUSTOM_SWITCH,INVERS+BLINK,0)
+	);
+	
+	lcd.drawText(2,9*5,'Minimum RSSI: ');
+	lcd.drawText(lcd.getLastPos()+2,9*5,_rssi_min_trigger,
+	--lcd.drawText(lcd.getLastPos()+2,9*5,getValue('ele'),
+		iif(CONFIG_CURRENT == CONFIG_MIN_RSSI,INVERS+BLINK,0)
+	);
 	
 	if(keyEvent == EVT_ENTER_BREAK) then
 		_currentPage = PAGE_GOGGLES_DOWN;
+	elseif(keyEvent == EVT_MINUS_BREAK) then
+		CONFIG_CURRENT = CONFIG_CURRENT + 1;
+		if(CONFIG_CURRENT > 2) then CONFIG_CURRENT = 2 end
+	elseif(keyEvent == EVT_PLUS_BREAK) then
+		CONFIG_CURRENT = CONFIG_CURRENT - 1;
+		if(CONFIG_CURRENT < 0) then CONFIG_CURRENT = 0 end
 	end
 end
 
