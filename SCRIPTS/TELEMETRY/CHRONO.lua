@@ -27,16 +27,20 @@ local _col1_row_height = max_height / 3; -- used only in first column
 local _col3_row_height = max_height / 2;
 
 -- config defaults
-local _lapCount = 4
-local _lapSwitch = 'ls1' -- a custom lap switch
+local CONFIG_FILENAME = '/chrono_config.cfg';
+local CONFIG_LAPCOUNT = 4
+local CONFIG_LAP_SWITCH = 'ls1' -- a custom lap switch
 local _throttle_channel = 'ch3'
 local _isThrottleStart = false -- starts the throttle using timer.
 local _throttle_trigger = -80 -- The throttle should be at %20 before the lap timer starts.
-local _rssi_min_trigger = 80 -- the minimum rssi to trigger a new lap 80default
+local CONFIG_RSSI_MIN_TRIGGER = 80 -- the minimum rssi to trigger a new lap 80default
 local _rssi_callout = false
 local _vfas_callout = false
-local _ls_names = {'ls1','ls2','ls3','ls4','ls5','ls6','ls7','ls8','ls9','ls10',}
-local _ls_index = 1 -- check _lapSwitch
+local _ls_names = {}
+for i = 1, 32 do
+	_ls_names[i] = 'ls'..i;
+end
+local _ls_index = 1 -- check CONFIG_LAP_SWITCH
 
 -- config helpers
 local CONFIG_LAPS = 0;
@@ -58,9 +62,10 @@ local PAGE_GOGGLES_DOWN = 2
 local PAGE_COUNT_DOWN = 3
 local PAGE_RUN = 4
 local PAGE_POST_RUN = 5
-local _currentPage = PAGE_CONFIG;
+local _currentPage = PAGE_SPLASH;
 
--- commons
+-- START of commons
+--{
 function round(x)
   return x>=0 and math.floor(x+0.5) or math.ceil(x-0.5)
 end
@@ -116,6 +121,50 @@ function iif(cond, T, F)
     if cond then return T else return F end
 end
 
+local function Config_Read()
+	local f = io.open(CONFIG_FILENAME, 'a')
+	if f ~= nil then
+		io.close(f)
+	end
+
+	f = io.open(CONFIG_FILENAME, 'r')
+	if f == nil then
+		-- defaults will be used
+		return false
+	end
+	
+	local content = io.read(f, 1024)
+	io.close(f)
+	
+	if content == '' then
+		-- defaults will be used
+		return false
+	end
+	
+	local c = {}
+
+	for value in string.gmatch(content, '([^,]+)') do
+		c[#c + 1] = value
+	end
+	
+	CONFIG_LAPCOUNT = tonumber(c[1]);
+	CONFIG_LAP_SWITCH = c[2];
+	CONFIG_RSSI_MIN_TRIGGER = tonumber(c[3]);
+	
+	return true
+end
+
+local function Config_Write()
+	local f = io.open(CONFIG_FILENAME, 'w')
+	io.write(f, CONFIG_LAPCOUNT)
+	io.write(f, ',' .. CONFIG_LAP_SWITCH)
+	io.write(f, ',' .. CONFIG_RSSI_MIN_TRIGGER)
+	io.close(f)
+end
+--}
+-- END of commons
+
+-- START of pages
 local function DRAW_SPLASH_PAGE(keyEvent)
 	lcd.clear();
 	
@@ -130,7 +179,7 @@ local function DRAW_CONFIG_PAGE(keyEvent)
 	lcd.drawText(169,0,'RSSI: '..rssi..'');
 	
 	ele = 0;
-	if(math.floor(getTime() - _lastTick) / 100 > 1) then
+	if(math.ceil(getTime() - _lastTick) / 100 > 0.3) then
 		ele = getValue('ele');	
 		_lastTick = getTime();		
 	end
@@ -146,38 +195,39 @@ local function DRAW_CONFIG_PAGE(keyEvent)
 	end
 	
 	if(CONFIG_CURRENT == CONFIG_LAPS) then
-		_lapCount = _lapCount + _incre;
-		if(_lapCount < 1) then _lapCount = 1 end
+		CONFIG_LAPCOUNT = CONFIG_LAPCOUNT + _incre;
+		if(CONFIG_LAPCOUNT < 1) then CONFIG_LAPCOUNT = 1 end
 	elseif (CONFIG_CURRENT == CONFIG_CUSTOM_SWITCH) then
 		_ls_index = _ls_index + _incre;
 		if(_ls_index < 1) then _ls_index = 1 end
-		if(_ls_index > 10) then _ls_index = 10 end
-		_lapSwitch = _ls_names[_ls_index];
+		if(_ls_index > #_ls_names) then _ls_index = #_ls_names end
+		CONFIG_LAP_SWITCH = _ls_names[_ls_index];
 	elseif (CONFIG_CURRENT == CONFIG_MIN_RSSI) then
-		_rssi_min_trigger = _rssi_min_trigger + _incre;
-		if(_rssi_min_trigger < 10) then _rssi_min_trigger = 10 end
+		CONFIG_RSSI_MIN_TRIGGER = CONFIG_RSSI_MIN_TRIGGER + _incre;
+		if(CONFIG_RSSI_MIN_TRIGGER < 10) then CONFIG_RSSI_MIN_TRIGGER = 10 end
 	end
 	
-	lcd.drawText(2,9,'MAKE SURE YOUR KWAD IS DIARMED!');
+	lcd.drawText(0,9,'        MAKE SURE YOUR KWAD IS DIARMED!         ',INVERS);
 	lcd.drawText(2,9*2,'Pitch up or down to adjust the values.');
 	
-	lcd.drawText(2,9*3,'Number of laps: ');
-	lcd.drawText(lcd.getLastPos()+2,9*3,_lapCount,
+	lcd.drawText(2,9*4,'Number of laps: ');
+	lcd.drawText(lcd.getLastPos()+2,9*4,CONFIG_LAPCOUNT,
 		iif(CONFIG_CURRENT == CONFIG_LAPS,INVERS+BLINK,0)
 	);
 	
-	lcd.drawText(2,9*4,'Custom switch in LS: ');
-	lcd.drawText(lcd.getLastPos()+2,9*4,_lapSwitch,
+	lcd.drawText(2,9*5,'Custom switch in LS: ');
+	lcd.drawText(lcd.getLastPos()+2,9*5,CONFIG_LAP_SWITCH,
 		iif(CONFIG_CURRENT == CONFIG_CUSTOM_SWITCH,INVERS+BLINK,0)
 	);
 	
-	lcd.drawText(2,9*5,'Minimum RSSI: ');
-	lcd.drawText(lcd.getLastPos()+2,9*5,_rssi_min_trigger,
+	lcd.drawText(2,9*6,'Min RSSI trigger: ');
+	lcd.drawText(lcd.getLastPos()+2,9*6,CONFIG_RSSI_MIN_TRIGGER,
 	--lcd.drawText(lcd.getLastPos()+2,9*5,getValue('ele'),
 		iif(CONFIG_CURRENT == CONFIG_MIN_RSSI,INVERS+BLINK,0)
 	);
 	
 	if(keyEvent == EVT_ENTER_BREAK) then
+		Config_Write();
 		_currentPage = PAGE_GOGGLES_DOWN;
 	elseif(keyEvent == EVT_MINUS_BREAK) then
 		CONFIG_CURRENT = CONFIG_CURRENT + 1;
@@ -193,15 +243,20 @@ local function DRAW_GOGGLES_DOWN_PAGE(keyEvent)
 	
 	lcd.drawPixmap(0,0,'/bmp/chrono/gogdwn.bmp');
 	
-	lcd.drawText(109,14,'GOGGLES DOWN',MIDSIZE);
+	lcd.drawText(109,2,'Press MENU to go');
+	lcd.drawText(109,11,'to Configurations.');
 	
-	lcd.drawText(110,42,'Press ENT to start');
-	lcd.drawText(110,50,'the count-down.');
+	lcd.drawText(109,33,'GOGGLES DOWN',MIDSIZE);
+	
+	lcd.drawText(110,46,'Press ENT to start');
+	lcd.drawText(110,54,'the count-down.');
 	
 	if(keyEvent == EVT_ENTER_BREAK) then
 		_lastTick = getTime();
 		_currentPage = PAGE_COUNT_DOWN;		
 		lcd.clear();
+	elseif(keyEvent == EVT_MENU_BREAK) then
+		_currentPage = PAGE_CONFIG;
 	elseif(keyEvent == EVT_PLUS_BREAK) then
 		-- repeat goggles down audio
 		playFile('CHRONO/gogdwn.wav');
@@ -234,76 +289,78 @@ local function DRAW_PAGE_COUNT_DOWN(keyEvent)
 	end
 end
 
--- START - RUN PAGE methods
-function DrawLayout()
-	--lcd.drawRectangle(0,0,max_width,max_height,SOLID);
-	
-	-- create columns
-	lcd.drawLine(_col_width,0,_col_width,max_height,SOLID,FORCE)
-	lcd.drawLine(_col_width*2,0,_col_width*2,max_height,SOLID,FORCE)
-	
-	-- col 1
-	-- draw rows
-	lcd.drawLine(0,_col1_row_height,_col_width,_col1_row_height,SOLID,FORCE)
-	lcd.drawLine(0,_col1_row_height*2,_col_width,_col1_row_height*2,SOLID,FORCE)
-	
-	
-	--lcd.drawText(1,_col1_row_height+4,'AVE',SMLSIZE);
-	lcd.drawText(1,_col1_row_height+4,'BST',SMLSIZE);
-	lcd.drawText(1,(_col1_row_height*2)+4,'LAP',SMLSIZE);
-	lcd.drawFilledRectangle(0,_col1_row_height+1,17,_col1_row_height*2,DARK,FORCE);
-	
-	-- col 2
-	-- col 3
-	lcd.drawLine(_col_width*2,_col3_row_height,_col_width*3,_col3_row_height,SOLID,FORCE)
-end
-
-function PrintAverage()
-	local ave = 0
-	if(#_laps > 0) then
-		for i = 1, #_laps do
-			ave = ave + _laps[i];
-		end
-		ave = ave / #_laps;
-		lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(ave),MIDSIZE);
-	else
-		lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(0),MIDSIZE);
+--START - RUN PAGE methods
+--{
+	function DrawLayout()
+		--lcd.drawRectangle(0,0,max_width,max_height,SOLID);
+		
+		-- create columns
+		lcd.drawLine(_col_width,0,_col_width,max_height,SOLID,FORCE)
+		lcd.drawLine(_col_width*2,0,_col_width*2,max_height,SOLID,FORCE)
+		
+		-- col 1
+		-- draw rows
+		lcd.drawLine(0,_col1_row_height,_col_width,_col1_row_height,SOLID,FORCE)
+		lcd.drawLine(0,_col1_row_height*2,_col_width,_col1_row_height*2,SOLID,FORCE)
+		
+		
+		--lcd.drawText(1,_col1_row_height+4,'AVE',SMLSIZE);
+		lcd.drawText(1,_col1_row_height+4,'BST',SMLSIZE);
+		lcd.drawText(1,(_col1_row_height*2)+4,'LAP',SMLSIZE);
+		lcd.drawFilledRectangle(0,_col1_row_height+1,17,_col1_row_height*2,DARK,FORCE);
+		
+		-- col 2
+		-- col 3
+		lcd.drawLine(_col_width*2,_col3_row_height,_col_width*3,_col3_row_height,SOLID,FORCE)
 	end
-end
 
-function PrintBestTime()
-	local best = 0;
-	if(#_laps > 0) then
-		best = _laps[1]
-		for i = 1, #_laps do
-			if(_laps[i] < best) then
-				best = _laps[i]
+	function PrintAverage()
+		local ave = 0
+		if(#_laps > 0) then
+			for i = 1, #_laps do
+				ave = ave + _laps[i];
+			end
+			ave = ave / #_laps;
+			lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(ave),MIDSIZE);
+		else
+			lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(0),MIDSIZE);
+		end
+	end
+
+	function PrintBestTime()
+		local best = 0;
+		if(#_laps > 0) then
+			best = _laps[1]
+			for i = 1, #_laps do
+				if(_laps[i] < best) then
+					best = _laps[i]
+				end
+			end
+			lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(best),MIDSIZE);
+		else
+			lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(0),MIDSIZE);
+		end
+	end
+
+	function PrintLaps()
+		lcd.drawText(19,(_col1_row_height*2)+5,_currentLapNumber..' - '..CONFIG_LAPCOUNT,MIDSIZE);
+
+		if #_laps == 0 then
+			return;
+		end
+		
+		if(#_laps > 0) then
+			for i = 1, #_laps do
+				lcd.drawText(
+					_col_width+13,((i-1)*9) + 2, 
+					i .. ': ' .. SecondsToMSMs(_laps[i])
+				);
 			end
 		end
-		lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(best),MIDSIZE);
-	else
-		lcd.drawText(19,_col1_row_height+5,SecondsToMSMs(0),MIDSIZE);
 	end
-end
 
-function PrintLaps()
-	lcd.drawText(19,(_col1_row_height*2)+5,_currentLapNumber..' - '.._lapCount,MIDSIZE);
-
-	if #_laps == 0 then
-		return;
-	end
+	function DrawGauges()
 	
-	if(#_laps > 0) then
-		for i = 1, #_laps do
-			lcd.drawText(
-				_col_width+13,((i-1)*9) + 2, 
-				i .. ': ' .. SecondsToMSMs(_laps[i])
-			);
-		end
-	end
-end
-
-function DrawGauges()
 	local rssi = getValue(DS_RSSI);
 	local vfas = getValue(DS_VFAS);	
 	
@@ -313,9 +370,11 @@ function DrawGauges()
 	lcd.drawGauge((_col_width*2)+3,14,_col_width-4,15,rssi,100);
 	lcd.drawGauge((_col_width*2)+3,_col3_row_height+14,_col_width-4,15,vfas,16.8);
 end
+--}
+-- END - RUN PAGE methods
  
 local function DRAW_RUN_PAGE(keyEvent)	 
-	if(_currentLapNumber==_lapCount) then
+	if(_currentLapNumber==CONFIG_LAPCOUNT) then
 		--_currentPage = PAGE_POST_RUN
 		
 		return;
@@ -341,14 +400,14 @@ local function DRAW_RUN_PAGE(keyEvent)
 	--local vfas = getValue(DS_VFAS);
 	
 	-- switches
-	local custom_switch = getValue(_lapSwitch);
+	local custom_switch = getValue(CONFIG_LAP_SWITCH);
 	local rssi = getValue(DS_RSSI);
 	
 	-- activate only if there's a changes in custom switch, rssi is greater than the rssi trigger and lap time is greater than 5
-	if (_lastLapSwitchValue ~= custom_switch or rssi > _rssi_min_trigger) and lapTimeDuration > 5 then
+	if (_lastLapSwitchValue ~= custom_switch or rssi > CONFIG_RSSI_MIN_TRIGGER) and lapTimeDuration > 5 then
 		_lastLapSwitchValue = custom_switch;
 		
-		if (_lastLapSwitchValue > 0 or rssi > _rssi_min_trigger) then
+		if (_lastLapSwitchValue > 0 or rssi > CONFIG_RSSI_MIN_TRIGGER) then
 			--_endTick = getTime();
 			
 			_currentLapNumber = _currentLapNumber + 1;
@@ -376,15 +435,20 @@ local function DRAW_RUN_PAGE(keyEvent)
 	PrintLaps();
 	PrintBestTime();
 end
--- END - RUN PAGE methods
 
 local function DRAW_POST_RUN(keyEvent)
 	lcd.clear();
 	lcd.drawText(1,1,'POST RUN');
 end
+-- END of pages
 
+-- entry
 local function Init()
-	
+	if (Config_Read() == true) then
+		_currentPage = PAGE_GOGGLES_DOWN
+	else
+		_currentPage = PAGE_CONFIG
+	end
 	_startTick = getTime();
 end
 
