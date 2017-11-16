@@ -4,6 +4,7 @@ local _lastLapSwitchValue = 0;
 local _lastTick = getTime();
 local _bestLap = 123456;
 local _lastCount = 0; -- used in count down
+local _showDiscardReturn = false;
 
 -- laps
 local _isNewLap = false;
@@ -199,16 +200,18 @@ local function DRAW_CONFIG_PAGE(keyEvent)
 		if(CONFIG_LAPCOUNT < 1) then CONFIG_LAPCOUNT = 1 end
 	elseif (CONFIG_CURRENT == CONFIG_CUSTOM_SWITCH) then
 		_ls_index = _ls_index + _incre;
-		if(_ls_index < 1) then _ls_index = 1 end
-		if(_ls_index > #_ls_names) then _ls_index = #_ls_names end
+		if(_ls_index < 1) then _ls_index = #_ls_names end
+		if(_ls_index > #_ls_names) then _ls_index = 1 end
 		CONFIG_LAP_SWITCH = _ls_names[_ls_index];
 	elseif (CONFIG_CURRENT == CONFIG_MIN_RSSI) then
 		CONFIG_RSSI_MIN_TRIGGER = CONFIG_RSSI_MIN_TRIGGER + _incre;
-		if(CONFIG_RSSI_MIN_TRIGGER < 10) then CONFIG_RSSI_MIN_TRIGGER = 10 end
+		if(CONFIG_RSSI_MIN_TRIGGER < 0) then CONFIG_RSSI_MIN_TRIGGER = 100 end
+		if(CONFIG_RSSI_MIN_TRIGGER > 100) then CONFIG_RSSI_MIN_TRIGGER = 0 end
 	end
 	
-	lcd.drawText(0,9,'        MAKE SURE YOUR KWAD IS DIARMED!         ',INVERS);
-	lcd.drawText(2,9*2,'Pitch up or down to adjust the values.');
+	lcd.drawText(0,9,'            MAKE SURE YOUR KWAD IS DIARMED!            ',SMLSIZE+INVERS+BLINK);
+	lcd.drawText(2,17,'Pitch up or down to adjust the values. Use +/-',SMLSIZE);
+	lcd.drawText(2,8*3,'to move up or down.',SMLSIZE);
 	
 	lcd.drawText(2,9*4,'Number of laps: ');
 	lcd.drawText(lcd.getLastPos()+2,9*4,CONFIG_LAPCOUNT,
@@ -370,13 +373,43 @@ end
 	lcd.drawGauge((_col_width*2)+3,14,_col_width-4,15,rssi,100);
 	lcd.drawGauge((_col_width*2)+3,_col3_row_height+14,_col_width-4,15,vfas,16.8);
 end
+
+	function ResetStats()
+		_isNewLap = false;
+		_laps = {}
+		_currentLapNumber = 0;
+		_showDiscardReturn = false;
+	end
+
+	function DrawDiscardReturn(keyEvent)
+		width = 105;
+		height = 40;
+		srtX = (max_width - width) / 2;
+		srtY = (max_height - height) / 2;
+		lcd.drawFilledRectangle(srtX,srtY,width,height,GREY_DEFAULT);
+		
+		lcd.drawText(srtX+1,srtY+1,'Discard the laps?    ',INVERS);
+		
+		lcd.drawText(srtX+3,srtY+11,'ENT to Discard');
+		lcd.drawText(srtX+3,srtY+11+11,'- to Return');
+		
+		if(keyEvent == EVT_MINUS_BREAK) then
+			_showDiscardReturn = false;
+		elseif(keyEvent == EVT_ENTER_BREAK) then
+			ResetStats();
+			_currentPage = PAGE_GOGGLES_DOWN
+		end
+	end
 --}
 -- END - RUN PAGE methods
  
 local function DRAW_RUN_PAGE(keyEvent)	 
 	if(_currentLapNumber==CONFIG_LAPCOUNT) then
 		--_currentPage = PAGE_POST_RUN
-		
+		if(keyEvent == EVT_EXIT_BREAK) then
+			ResetStats();
+			_currentPage = PAGE_GOGGLES_DOWN;
+		end
 		return;
 	end	
 	
@@ -434,11 +467,19 @@ local function DRAW_RUN_PAGE(keyEvent)
 	
 	PrintLaps();
 	PrintBestTime();
+	
+	if(keyEvent == EVT_EXIT_BREAK) then
+		_showDiscardReturn = true;
+	end
+	
+	if(_showDiscardReturn) then
+		DrawDiscardReturn(keyEvent);
+	end
 end
 
 local function DRAW_POST_RUN(keyEvent)
-	lcd.clear();
-	lcd.drawText(1,1,'POST RUN');
+	lcd.drawText(1,1,'Discard');
+	lcd.drawText(1,1,'Return');
 end
 -- END of pages
 
