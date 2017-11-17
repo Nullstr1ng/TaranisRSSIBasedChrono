@@ -151,6 +151,7 @@ local function Config_Read()
 	CONFIG_LAPCOUNT = tonumber(c[1]);
 	CONFIG_LAP_SWITCH = c[2];
 	CONFIG_RSSI_MIN_TRIGGER = tonumber(c[3]);
+	_ls_index = tonumber(string.sub(c[2],3));
 	
 	return true
 end
@@ -174,7 +175,7 @@ end
 
 local function DRAW_CONFIG_PAGE(keyEvent)
 	lcd.clear();
-	lcd.drawScreenTitle('Configuration',0,0);
+	lcd.drawScreenTitle('Configuration'.._ls_index,0,0);
 	
 	rssi = getValue(DS_RSSI);
 	lcd.drawText(169,0,'RSSI: '..rssi..'');
